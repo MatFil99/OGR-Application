@@ -102,6 +102,7 @@ class OptionsPanel(ttk.Frame):
 
     def load_filedialog(self, var):
         types = (
+            ("All","*"),
             ("JPG","*.jpg"), 
             ("PNG","*.png"))
         filename = filedialog.askopenfilename(
@@ -114,6 +115,7 @@ class OptionsPanel(ttk.Frame):
 
     def save_filedialog(self, var):
         types = (
+            ("All", "*"),
             ("GraphML - simple graph format","*.graphml"), 
             ("XML - format used by draw.io", "*.xml"),
             ("GRF - format used by Modgraf", "*.grf"))

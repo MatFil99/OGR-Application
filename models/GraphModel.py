@@ -23,12 +23,11 @@ class GraphModel(Graph):
         try:
             in_img = cv.imread(user_params.input_path)
 
-            if not user_params.correct_parameters():
+            if not user_params.correct_parameters_all():
                 print("Raising exception wrong params")
                 raise Exception('Parameters are not set')
 
             preprocessed = preprocess(in_img, user_params)
-
             vertices, vert_img = segment(preprocessed, user_params)
             vertices, edges = recognize_topology(preprocessed, vert_img, vertices, user_params)
 
@@ -37,9 +36,14 @@ class GraphModel(Graph):
             self.type = user_params.graph_type
 
             # get size of recognized graph's image (base, which szie will be adjust to frame size)
+            
             self.img_height = preprocessed.shape[0]
             self.img_width = preprocessed.shape[1]
             self.rec_graph_img = draw_graph((self.img_height, self.img_width), self.vertices, self.edges)
+
+            tmp = cv.cvtColor(self.rec_graph_img, cv.COLOR_RGB2BGR)
+            cv.imshow("self.rec_graph_img", tmp)
+            cv.waitKey()
 
             success = True
             

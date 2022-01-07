@@ -8,15 +8,13 @@ def preprocess(source_img, user_params: UserParams):
     First step of Optical Graph Recognition is to prepare image:
     """
 
-    print(f"in_img_type = {user_params.in_img_type}")
     resized = resize(source_img)
-    gray_img = convert_to_grayscale(resized, user_params.in_img_type)
+    gray_img = convert_to_grayscale(resized, user_params.in_img_type, user_params.bg_brightness)
     clean_gray = grayscale_denoising(gray_img)
     binary = convert_to_binary(clean_gray, user_params.in_img_type)
-
-    clean_binary = binary_denoising(binary)
+    extended_bin = extend_binary(binary)
+    clean_binary = binary_denoising(extended_bin)
     
-
     # tests - remove after
 
     # cv.imshow("resized", resized)
@@ -24,9 +22,17 @@ def preprocess(source_img, user_params: UserParams):
     # cv.imshow("clean_gray", clean_gray)
     # cv.imshow("binary", binary)
     # cv.imshow("clean_binary", clean_binary)
+    # cv.waitKey()
     
     return clean_binary
 
+def extend_binary(binary):
+    """"""
+    offset = 5
+    result = np.zeros((binary.shape[0] + 2*offset, binary.shape[1] + 2*offset), np.uint8)
+    result[offset:result.shape[0]-offset, offset:result.shape[1]-offset] = binary
+
+    return result
 
 def resize(img, maxwidth=Options.MAXWIDTH, maxheight=Options.MAXHEIGHT):
     """
@@ -45,7 +51,7 @@ def resize(img, maxwidth=Options.MAXWIDTH, maxheight=Options.MAXHEIGHT):
     result = cv.resize(img, (0,0), fx=factor, fy=factor)
     return result
 
-def convert_to_grayscale(image, in_img_type = UserParams.InImgType.PHOTO_IMG):
+def convert_to_grayscale(image, in_img_type = UserParams.InImgType.PHOTO_IMG, bg_brightness = None):
     """
     convert BGR image to grayscale image 
     represent background by bright color (white) and graph by dark (black) 
@@ -53,19 +59,23 @@ def convert_to_grayscale(image, in_img_type = UserParams.InImgType.PHOTO_IMG):
     
     grayscale_img = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     
-    mean_brightness = np.average(grayscale_img)
-    median_brightness = np.median(grayscale_img)
+    if not bg_brightness:
+        mean_brightness = np.average(grayscale_img)
+        median_brightness = np.median(grayscale_img)
 
-    min_brightness = np.min(grayscale_img)
-    max_brightness = np.max(grayscale_img)
-    minmax_avg_brightness = min_brightness/2 + max_brightness/2
+        min_brightness = np.min(grayscale_img)
+        max_brightness = np.max(grayscale_img)
+        minmax_avg_brightness = min_brightness/2 + max_brightness/2
 
-    if in_img_type == UserParams.InImgType.PHOTO_IMG:
-        if median_brightness < mean_brightness:
-            grayscale_img = cv.bitwise_not(grayscale_img)
+        if in_img_type == UserParams.InImgType.PHOTO_IMG:
+            if median_brightness < mean_brightness:
+                grayscale_img = cv.bitwise_not(grayscale_img)
 
-    if in_img_type == UserParams.InImgType.COMPUTER_IMG:
-        if median_brightness < minmax_avg_brightness:
+        if in_img_type == UserParams.InImgType.COMPUTER_IMG:
+            if median_brightness < minmax_avg_brightness:
+                grayscale_img = cv.bitwise_not(grayscale_img)
+    else:
+        if bg_brightness == UserParams.BgBrightness.BG_DARK:
             grayscale_img = cv.bitwise_not(grayscale_img)
 
     return grayscale_img
@@ -103,24 +113,25 @@ def convert_to_binary(gray_img, in_img_type=UserParams.InImgType.PHOTO_IMG, bloc
         mean_brightness = np.mean(gray_img)
         _, binary = cv.threshold(gray_img, mean_brightness, 255, thresh_type)
 
-    # cv.imshow("binary", binary)
-
     return binary
 
 def binary_denoising(binary_img, h=Options.MAXNOISE):
     """
     removes noise - next removes small contours (pics)
     """
-    clean_bin = binary_img.copy()
-    contours, hierarchy = cv.findContours(binary_img, cv.RETR_LIST, cv.CHAIN_APPROX_NONE) # CHAIN_APPROX_SIMPLE
-    noise_contours = list()
+    
+    clean_bin = np.zeros((binary_img.shape[0], binary_img.shape[1], 1), np.uint8)
+    contours, hierarchy = cv.findContours(binary_img, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE) # CHAIN_APPROX_SIMPLE
 
+    clean_contours = list()
     it = 0
     for cnt in contours:
-        if len(cnt) < h:
-            noise_contours.append(cnt)
+
+        if len(cnt) > h :
+            clean_contours.append(cnt)
             it+=1
-    cv.drawContours(clean_bin, noise_contours, -1, color=Color.BG, thickness=cv.FILLED)
-    
+
+    cv.drawContours(clean_bin, clean_contours, -1, color=Color.WHITE, thickness=cv.FILLED)
+
     return clean_bin
 

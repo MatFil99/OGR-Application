@@ -1,5 +1,6 @@
 import cv2 as cv
 import numpy as np
+from numpy.core.numeric import count_nonzero
 
 from .graph import *
 from .share import *
@@ -11,39 +12,57 @@ def segment(preprocessed, user_params: UserParams):
     return: vertices list, vertices image
     """
 
-    # cv.imshow("preprocessed", preprocessed)
-
     preprocessed = cv.morphologyEx(preprocessed, cv.MORPH_CLOSE, np.ones((3,3), dtype=np.uint8), iterations=2) # close operation
-
-    # cv.imshow("preprocessed", preprocessed)
 
     # if vertices are FILLED
     if user_params.vertices_type == UserParams.VerticesType.FILLED:
-        preprocessed = skeletonize_thick_obj(preprocessed, 2)
-
-    vertices, vertices_img = find_vertices(preprocessed)
-
-
+        filled_vertices_img = get_filled_vertices(preprocessed, 2)
+        vertices, vertices_img = find_filled_vertices(filled_vertices_img)
+    # if vertices are UNFILLED
+    else:
+        vertices, vertices_img = find_unfilled_vertices(preprocessed)
 
     # cv.imshow("vertices_img", vertices_img)
-    # vertices = 0
-    # vertices_img = 0
+    # cv.waitKey()
 
     return vertices, vertices_img
 
-def find_vertices(binary_img):
+def find_filled_vertices(binary_img):
+    pass
+
+    contours, _ = cv.findContours(binary_img, cv.RETR_LIST, cv.CHAIN_APPROX_NONE)
+    result = np.zeros((binary_img.shape[0], binary_img.shape[1], 1), np.uint8)
+    vertices_list = []
+
+    it = 0
+    for c in contours:
+        (x, y), r = cv.minEnclosingCircle(c)
+        if Options.MIN_VERTEX_RADIUS <= r <= Options.MAX_VERTEX_RADIUS:
+            v = Vertex(int(x), int(y), int(r), str(it))
+            vertices_list.append(v)
+            cv.circle(result, (v.x,v.y), v.r, Color.WHITE, thickness=cv.FILLED)
+            it+=1
+
+    return vertices_list, result
+
+def find_unfilled_vertices(binary_img):
     """
     detect vertices and fill them
     search contours which look like circles
     return: vertices list, image of filled vertices
     """
 
+    # temp = np.ones((binary_img.shape[0],binary_img.shape[1],3), np.uint8)*255
+
+
     contours, hierarchy = cv.findContours(binary_img, cv.RETR_LIST, cv.CHAIN_APPROX_NONE) # CHAIN_APPROX_SIMPLE
     result_img = np.zeros((binary_img.shape[0], binary_img.shape[1], 1), np.uint8)
 
     vertices_list = []
     vertices_contours = []
+    vertices_ratios = []
 
+    # minimum and maximum contours which can be detect as vertex
     MIN_ = 1 # to define
     MAX_ = 10000 # to define
 
@@ -52,7 +71,7 @@ def find_vertices(binary_img):
         if MAX_ > len(cnt) > MIN_:
             (x, y), r = cv.minEnclosingCircle(cnt)
             area = cv.contourArea(cnt)
-            encl_cir_area = np.pi*r**2
+            encl_cir_area = np.pi*r**2 - 2*np.pi*r
             if area != 0:
                 areas_ratio = (encl_cir_area/area - 1)*100 # percent
             else:
@@ -60,12 +79,23 @@ def find_vertices(binary_img):
 
             if areas_ratio < Options.CIRCLE_DETECTION_PRECISION and \
                     Options.MIN_VERTEX_RADIUS <= r <= Options.MAX_VERTEX_RADIUS:
+                # print(f"{Options.MIN_VERTEX_RADIUS} <= {r} <= {Options.MAX_VERTEX_RADIUS} ")
                 v = Vertex(x, y, r, str(it)) 
                 vertices_list.append(v)
                 vertices_contours.append(cnt)
+                vertices_ratios.append(areas_ratio)
                 it+=1
-    
+
     # remove vertices that intersect (duplicates)
+    result_vertices, result_contours = remove_interseting_vertices(vertices_list,vertices_ratios,vertices_contours)
+
+    cv.drawContours(result_img, result_contours, -1, Color.WHITE, thickness=cv.FILLED)
+
+    result_img = cv.dilate(result_img, Kernel.k3, iterations=2)# or it = 2
+
+    return result_vertices, result_img
+
+def remove_interseting_vertices(vertices_list, vertices_ratios, vertices_contours):
     median_r = np.median([v.r for v in vertices_list]) if vertices_list else 0
     result_vertices = []
     result_contours = []
@@ -75,32 +105,36 @@ def find_vertices(binary_img):
 
         if v is None:
             continue
+        
+        if v.r > Options.MAX_RADIUS_STD * median_r or v.r < median_r / Options.MAX_RADIUS_STD:
+            vertices_list[i] = None
+            continue
+
         intersecting = intersecting_vertices(v, vertices_list)
-        idx_best_vertex = i
-        diff_r = np.abs(v.r - median_r)
-        v_best = vertices_list[i]
+        cir_ratio = vertices_ratios[i]
+        proper_cir = True
 
         for j in intersecting:
             vj = vertices_list[j]
-            if np.abs(vj.r - median_r) < diff_r:
-                diff_r = np.abs(vj.r - median_r)
-                idx_best_vertex = j
-                v_best = vertices_list[idx_best_vertex]
+            if vj.r > Options.MAX_RADIUS_STD * median_r or vj.r < median_r / Options.MAX_RADIUS_STD:
+                continue
+            vj = vertices_list[j]
+            if vertices_ratios[j] < cir_ratio:
+                proper_cir = False
+                break
 
-                vertices_list[i] = None # better vertex found, so remove 
-            vertices_list[j] = None
+        if proper_cir:
+            for j in intersecting:
+                vertices_list[j] = None
+            v.set_label(str(idx))
+            result_vertices.append(v)
+            result_contours.append(vertices_contours[i])
+            idx += 1
+        else:
+            vertices_list[i] = None
 
-        v_best.set_label(str(idx))
-        result_vertices.append(v_best)
-        result_contours.append(vertices_contours[idx_best_vertex])
-        idx += 1
+    return result_vertices, result_contours
 
-    cv.drawContours(result_img, result_contours, -1, Color.WHITE, thickness=cv.FILLED)
-    result_img = cv.dilate(result_img, Kernel.k3, iterations=2)
-
-    # cv.imshow("vertices", result_img)
-
-    return result_vertices, result_img
 
 def intersecting_vertices(vertex, vertices):
     """
@@ -109,12 +143,12 @@ def intersecting_vertices(vertex, vertices):
     intersecting = []
     for i in range(1, len(vertices)):
         v = vertices[i]
-        if v is not None and distance_2P([vertex.x, vertex.y], [v.x, v.y]) < (v.r + vertex.r) and v != vertex:
+        if v is not None and distance_2P([vertex.x, vertex.y], [v.x, v.y]) < (v.r + vertex.r + Options.MIN_LINE_LENGTH) and v != vertex:
             intersecting.append(i)
 
     return intersecting
 
-def skeletonize_thick_obj(binary_img, iters=2):
+def get_filled_vertices(binary_img, iters=2):
     """"""
     binary_tmp = binary_img.copy()
     nr_objects, _ = cv.connectedComponents(binary_img, 8)
@@ -122,7 +156,7 @@ def skeletonize_thick_obj(binary_img, iters=2):
     counter_same_nr = 0
     prev_nr_objs = nr_objects
     it = 0
-    max_it = 5
+    max_it = 10
     
     while (not any_removed or counter_same_nr < 2) and it < max_it:
         binary_tmp = cv.erode(binary_tmp, Kernel.k3, iterations=iters)
@@ -138,5 +172,8 @@ def skeletonize_thick_obj(binary_img, iters=2):
         it += 1
 
     result = cv.dilate(binary_tmp, Kernel.k3, iterations=it*iters)
+    # cv.imshow("result", result)
+    # cv.imshow("binary_img", binary_tmp)
+    # cv.waitKey()
 
     return result

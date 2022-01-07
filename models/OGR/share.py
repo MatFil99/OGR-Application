@@ -43,35 +43,37 @@ class UserParams:
         self.in_img_type = UserParams.UNDEFINED
         self.vertices_type = UserParams.UNDEFINED
 
-    def correct_parameters(self):
+    def correct_parameters_all(self):
         return self.input_path != UserParams.UNDEFINED and \
             self.bg_brightness != UserParams.UNDEFINED and \
             self.graph_type != UserParams.UNDEFINED and \
             self.in_img_type != UserParams.UNDEFINED and \
             self.vertices_type != UserParams.UNDEFINED
 
+    def correct_parameters_required(self):
+        return self.input_path != UserParams.UNDEFINED
+
 class Options:
     # preprocessing options
-    MAXWIDTH = 1200 # 
-    MAXHEIGHT = 800 # 
-    MAXNOISE = 4 #
+    MAXWIDTH = 1200 # 1400 
+    MAXHEIGHT = 800 # 1000
+    MAXNOISE = 6 #
 
     # segmnetation options
-    CIRCLE_DETECTION_PRECISION = 50 # higher precision causes that less contours can be recognised as a circle
-    MIN_VERTEX_RADIUS = int(0.01 * MAXHEIGHT)
+    CIRCLE_DETECTION_PRECISION = 50 # ~50 optimal # higher precision causes that more contours (also wrong) can be recognised as a circle
+    MIN_VERTEX_RADIUS = int(0.015 * MAXHEIGHT)
     MAX_VERTEX_RADIUS = int(0.2 * MAXHEIGHT)
 
     # topology recognition options
-    FL_EPSILON = 0.01 # unused
-    FL_DELTA = 0.01 # unused
-    MIN_LINE_LENGTH = int(0.007 * MAXHEIGHT) # or fixed value
+    MIN_LINE_LENGTH = int(0.005 * MAXHEIGHT) # or fixed value # now 4
     MAX_ARROW_EDGE_DIS = 0.75
 
-    XY_THRESHOLD = 5
-    ANGLE_THRESHOLD = 20
+    XY_THRESHOLD = 8
+    ANGLE_THRESHOLD = 25
     RADIUS_NEARBY_LINES = 70
-    AREA_VERTEX_EDGE = 0.7 # define how far from vertex can be edge to connect them (radius ratio)
+    AREA_VERTEX_EDGE = 2.0 # define how far from vertex can be edge to connect them (radius ratio) 1.2
 
+    MAX_RADIUS_STD = 2 # more than [2] times bigger or smaller vertices are wrong
     MAX_ARROW_LENGTH = int(0.05 * MAXHEIGHT)
     CURVE_ANGLE_THRESHOLD = 40
 
