@@ -1,9 +1,19 @@
-# run application
+# instalation and running application
 
 # on Windows
-double click ogr-app-win.bat
+
+# install
+double click installer-win.bat
+
+# launch app
+double click ogr-run-win.bat
+
 
 # on Linux
-double click ogr-app-lin.sh
-or run script from terminal
-./ogr-app-lin.sh
+
+# install
+run script from terminal (open terminal in the directory where installers are located)
+./installer-lin.sh
+
+# launch app
+./ogr-run-lin.sh
